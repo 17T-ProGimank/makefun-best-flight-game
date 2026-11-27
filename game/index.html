@@ -5,99 +5,99 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NUSA SKY RUN — Island Air Post</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1218;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  #gl, #hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  #hud { pointer-events: none; }
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip-path: inset(50%); white-space: nowrap; }
-  .overlay { position: fixed; inset: 0; display: flex; align-items: center;
-    justify-content: center; background: rgba(5, 10, 14, 0.45); z-index: 10; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #04121a; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #e8f6ff; }
+  canvas#gl, canvas#hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  canvas#hud { pointer-events: none; z-index: 3; }
+  canvas#gl { z-index: 1; }
+  #status { position: fixed; left: 8px; bottom: 6px; z-index: 5; font-size: 12px; color: #7fe7ff; opacity: 0.8; margin: 0; }
+  #errors { position: fixed; right: 8px; bottom: 6px; z-index: 5; font-size: 11px; color: #ff8080; max-width: 40vw; white-space: pre-wrap; text-align: right; }
+  #selftest { position: fixed; left: 8px; top: 8px; z-index: 5; font-size: 11px; color: #7dff9a; white-space: pre-wrap; max-width: 46vw; }
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(2, 10, 16, 0.72); }
   .overlay.hidden { display: none; }
-  .card { background: rgba(10, 18, 24, 0.92); border: 1px solid rgba(127, 231, 255, 0.35);
-    border-radius: 16px; padding: 28px 34px; max-width: 640px; width: calc(100% - 48px);
-    color: #eef4f8; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55); }
-  .card h1 { margin: 0 0 4px; font-size: 40px; letter-spacing: 2px; color: #7fe7ff; }
-  .card h1 .accent { color: #ffc21a; }
-  .card h2 { margin: 0 0 6px; font-size: 26px; color: #ffc21a; letter-spacing: 1px; }
-  .card p { margin: 8px 0; line-height: 1.5; color: #c8d6de; }
-  .card .sub { color: #7fe7ff; font-weight: 700; letter-spacing: 1px; }
-  .missions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0 6px; }
-  .mission-btn { text-align: left; background: #12222c; border: 1px solid rgba(127,231,255,0.35);
-    border-radius: 10px; padding: 12px 14px; color: #eef4f8; cursor: pointer; font: inherit; }
-  .mission-btn:hover, .mission-btn:focus-visible { border-color: #ffc21a; background: #1a2f3a; outline: none; }
-  .mission-btn b { display: block; font-size: 16px; color: #ffc21a; margin-bottom: 3px; }
-  .mission-btn span { font-size: 13px; color: #b9c9d2; line-height: 1.4; display: block; }
-  .mission-btn .key { float: right; color: #7fe7ff; font-weight: 800; }
-  .controls { font-size: 13px; color: #9fb2bd; line-height: 1.7; margin-top: 14px;
-    border-top: 1px solid rgba(127,231,255,0.2); padding-top: 12px; }
-  .controls b { color: #eef4f8; }
-  .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
-  .btn { background: #ffc21a; color: #1a1405; border: 0; border-radius: 8px;
-    padding: 11px 20px; font: inherit; font-weight: 800; cursor: pointer; }
-  .btn.ghost { background: transparent; color: #7fe7ff; border: 1px solid rgba(127,231,255,0.5); }
-  .btn:hover { filter: brightness(1.08); }
-  .debrief-row { display: flex; justify-content: space-between; padding: 7px 0;
-    border-bottom: 1px solid rgba(127,231,255,0.14); }
-  .debrief-row span { color: #9fb2bd; }
-  .debrief-row.good b { color: #37d67a; }
-  .debrief-row.bad b { color: #ff4d4d; }
-  .debrief-log { margin-top: 12px; font-size: 13px; color: #8fa3ad; line-height: 1.7; }
-  #best-line { margin-top: 14px; font-size: 13px; color: #7fe7ff; }
-  #errors, #selftest { display: none; }
+  .card { background: rgba(4, 24, 34, 0.94); border: 1px solid #7fe7ff; border-radius: 14px; padding: 26px 30px; max-width: 760px; width: calc(100% - 40px); max-height: 92vh; overflow-y: auto; box-shadow: 0 0 40px rgba(127, 231, 255, 0.25); }
+  .card h1 { margin: 0 0 4px; font-size: 42px; letter-spacing: 4px; color: #7fe7ff; }
+  .card h2 { margin: 0 0 12px; font-size: 28px; letter-spacing: 2px; color: #7fe7ff; }
+  .card .sub { margin: 0 0 14px; color: #ffc21a; letter-spacing: 2px; font-size: 13px; font-weight: 700; }
+  .card p { line-height: 1.5; margin: 0 0 12px; }
+  .missions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+  .mission-btn { display: block; text-align: left; background: rgba(127, 231, 255, 0.08); border: 1px solid #7fe7ff; color: #e8f6ff; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 14px; line-height: 1.35; }
+  .mission-btn:hover, .mission-btn:focus { background: rgba(127, 231, 255, 0.22); outline: none; }
+  .mission-btn b { color: #7fe7ff; display: block; font-size: 15px; }
+  .mission-btn span { color: #ffc21a; font-size: 12px; }
+  .mission-btn .key { float: right; color: #ffc21a; font-weight: 700; border: 1px solid #ffc21a; border-radius: 4px; padding: 0 6px; font-size: 12px; }
+  .controls { font-size: 13px; color: #a8d8e8; }
+  .controls b { color: #7fe7ff; }
+  #best-line, #logbook-line { font-size: 13px; color: #ffc21a; margin: 6px 0; }
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .btn { background: #7fe7ff; color: #04121a; border: none; border-radius: 8px; padding: 12px 22px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  .btn:hover { background: #a8efff; }
+  .btn.ghost { background: transparent; color: #7fe7ff; border: 1px solid #7fe7ff; }
+  .btn.ghost:hover { background: rgba(127, 231, 255, 0.15); }
+  .debrief-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid rgba(127, 231, 255, 0.2); font-size: 15px; }
+  .debrief-row b { color: #7fe7ff; }
+  .debrief-row.good b { color: #7dff9a; }
+  .debrief-row.bad b { color: #ff8080; }
+  .debrief-row .lbl { color: #a8d8e8; }
+  .debrief-log { font-size: 13px; color: #a8d8e8; line-height: 1.6; margin-top: 10px; white-space: pre-wrap; }
+  #over-body h3 { color: #ffc21a; font-size: 15px; letter-spacing: 2px; margin: 16px 0 6px; }
+  #debrief-map, #landing-bars { display: block; width: 100%; height: auto; margin: 10px 0; border: 1px solid rgba(127, 231, 255, 0.4); border-radius: 8px; background: #04121a; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
 </script>
 </head>
 <body>
-<canvas id="gl" aria-label="NUSA SKY RUN: fly a bush plane over an island archipelago"></canvas>
+<canvas id="gl"></canvas>
 <canvas id="hud"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<p id="status"></p>
 <div id="errors"></div>
 <div id="selftest"></div>
 
-<div id="title" class="overlay">
+<div class="overlay" id="title">
   <div class="card">
-    <h1>NUSA <span class="accent">SKY RUN</span></h1>
-    <p class="sub">ISLAND AIR POST &mdash; FLY THE ARCHIPELAGO</p>
-    <p>One bush plane, four islands, one short runway. Race the rings, drop the
-    mail at three island strips, or grease a landing on runway 09 &mdash; and watch
-    your fuel, because the sea below does not forgive a glide.</p>
+    <h1>NUSA SKY RUN</h1>
+    <p class="sub">ISLAND AIR POST — FLY THE ARCHIPELAGO</p>
+    <p>You are the island air post pilot. Fly one bush plane across a 4.2&nbsp;km archipelago: thread the rings, carry the mail, land the strips, fight the fire, bring the patient home. Watch your fuel — the sea is always below, and it does not forgive a dead engine.</p>
+    <p>Pick a sortie — 8 to fly, keys 1–8:</p>
     <div class="missions">
-      <button class="mission-btn" data-mission="rings"><span class="key">1</span><b>RING RUN</b><span>8 rings around the islands against the clock. Every ring adds 15 seconds.</span></button>
-      <button class="mission-btn" data-mission="mail"><span class="key">2</span><b>MAIL RUN</b><span>Drop the mail at 3 island strips, then land back home on runway 09.</span></button>
-      <button class="mission-btn" data-mission="landing"><span class="key">3</span><b>LANDING CHALLENGE</b><span>Take off, climb to 800 ft, come back and land it soft and centred.</span></button>
-      <button class="mission-btn" data-mission="free"><span class="key">4</span><b>FREE FLIGHT</b><span>No clock, no score. Just you, the plane and the islands.</span></button>
+      <button class="mission-btn" data-mission="rings"><span class="key">1</span><b>RING RUN</b><span>Thread 8 rings against the clock</span></button>
+      <button class="mission-btn" data-mission="mail"><span class="key">2</span><b>MAIL RUN</b><span>Deliver to 3 island strips, land home</span></button>
+      <button class="mission-btn" data-mission="landing"><span class="key">3</span><b>LANDING CHALLENGE</b><span>Climb 800 ft, grease it on 09</span></button>
+      <button class="mission-btn" data-mission="free"><span class="key">4</span><b>FREE FLIGHT</b><span>No clock, no score — just fly</span></button>
+      <button class="mission-btn" data-mission="fire"><span class="key">5</span><b>FIRE ATTACK</b><span>Scoop the sea, douse the Nusa Selatan fire</span></button>
+      <button class="mission-btn" data-mission="medevac"><span class="key">6</span><b>MEDEVAC</b><span>Fetch the patient from Mercusuar Islet</span></button>
+      <button class="mission-btn" data-mission="nightmail"><span class="key">7</span><b>NIGHT MAIL</b><span>Mail run at dusk — follow the flares</span></button>
+      <button class="mission-btn" data-mission="hopper"><span class="key">8</span><b>ISLAND HOPPER</b><span>Land all 3 strips in order, then home</span></button>
     </div>
-    <div class="controls">
-      <b>&larr; &rarr;</b> roll &nbsp; <b>&uarr; &darr;</b> pitch &nbsp; <b>Shift / Ctrl</b> throttle
-      &nbsp; <b>Q / E</b> rudder &nbsp; <b>drag mouse</b> stick &nbsp; <b>wheel</b> throttle<br>
-      <b>V</b> cockpit / chase view &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart &nbsp; <b>M</b> sound
-    </div>
+    <p class="controls"><b>ARROWS / WASD</b> roll &amp; pitch &nbsp;·&nbsp; <b>SHIFT / CTRL</b> or mouse wheel — throttle &nbsp;·&nbsp; <b>Q / E</b> rudder &nbsp;·&nbsp; drag mouse — stick &nbsp;·&nbsp; <b>V</b> view &nbsp;·&nbsp; <b>P</b> pause &nbsp;·&nbsp; <b>R</b> restart &nbsp;·&nbsp; <b>M</b> sound &nbsp;·&nbsp; <b>1–8</b> sortie</p>
     <p id="best-line"></p>
+    <p id="logbook-line"></p>
   </div>
 </div>
 
-<div id="pause" class="overlay hidden">
+<div class="overlay hidden" id="pause">
   <div class="card">
     <h2>PAUSED</h2>
-    <p>The islands will wait. Your fuel will not &mdash; well, actually, right now it will.</p>
+    <p>Take a breath. The islands will wait.</p>
     <div class="btn-row">
-      <button class="btn" data-action="resume">RESUME (P)</button>
-      <button class="btn ghost" data-action="restart">RESTART (R)</button>
-      <button class="btn ghost" data-action="title">CHANGE SORTIE</button>
+      <button class="btn" data-action="resume">RESUME</button>
+      <button class="btn ghost" data-action="restart">RESTART SORTIE</button>
+      <button class="btn ghost" data-action="title">TITLE SCREEN</button>
     </div>
   </div>
 </div>
 
-<div id="over" class="overlay hidden">
+<div class="overlay hidden" id="over">
   <div class="card">
     <h2 id="over-title">SORTIE COMPLETE</h2>
     <div id="over-body"></div>
+    <canvas id="debrief-map" width="600" height="360"></canvas>
+    <canvas id="landing-bars" width="600" height="130"></canvas>
     <div class="btn-row">
-      <button class="btn" data-action="again">FLY AGAIN (R)</button>
-      <button class="btn ghost" data-action="title">CHANGE SORTIE</button>
+      <button class="btn" data-action="again">FLY AGAIN</button>
+      <button class="btn ghost" data-action="title">TITLE SCREEN</button>
     </div>
   </div>
 </div>
