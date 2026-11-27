@@ -1,110 +1,105 @@
-// Deterministic screenshot staging: ?shot=cover|cockpit|landing|islands puts the
-// game into a fixed, good-looking state — the same seed always gives the same frame
-// — so the screenshots are real renders of the game's own code. Each shot starts
-// from a fresh flight on the runway, then overrides the plane and mission state.
-// NOTE: the mission object is read through game.missionApi every time, because
-// setMissionForShot replaces it — a destructured copy would go stale.
+// Deterministic screenshot staging for "NUSA SKY RUN — Island Air Post" (round 2).
+// main.js imports SHOT_NAMES, applyShot and colourRings from this module.
+// applyShot stages one named scene and returns 'play'; main.js then paints
+// three frames and sets window.__shotReady. Every shot is a real frame of the
+// game code (same flight model, world, HUD) with a frozen, hand-placed plane.
 
 export const SHOT_NAMES = ['cover', 'cockpit', 'landing', 'islands'];
 
+const DEG = Math.PI / 180;
+
+const COLOURS = {
+  next: { hex: '#ffc21a', opacity: 0.95 },
+  passed: { hex: '#37d67a', opacity: 0.45 },
+  idle: { hex: '#2fb3e6', opacity: 0.7 },
+};
+
 function placePlane(flight, x, y, z, headingDeg, pitchDeg, rollDeg, speed, throttle) {
-  const f = flight.state;
-  f.pos.set(x, y, z);
-  f.heading = (headingDeg * Math.PI) / 180;
-  f.pitch = (pitchDeg * Math.PI) / 180;
-  f.roll = (rollDeg * Math.PI) / 180;
-  f.speed = speed;
-  f.throttle = throttle;
-  f.onGround = false;
-  f.fuel = 72;
-  f.time = 42;
-  f.distanceFlown = 1840;
+  const st = flight.state;
+  st.pos.set(x, y, z);
+  st.heading = headingDeg * DEG;
+  st.pitch = pitchDeg * DEG;
+  st.roll = rollDeg * DEG;
+  st.speed = speed;
+  st.throttle = throttle;
+  st.onGround = false;
+  st.fuel = 72;
+  st.time = 42;
+  st.distanceFlown = 1840;
+  st.verticalSpeed = 0;
+  st.crashed = false;
+  st.crashReason = null;
 }
 
 function stageMission(game, id, fields) {
   game.setMissionForShot(id);
+  // missionApi is a getter on gameForShots — read it fresh every time, never
+  // hold a stale reference across a setMissionForShot call.
   Object.assign(game.missionApi.mission, fields);
 }
 
 export function applyShot(name, game) {
-  const { flight } = game;
-  flight.resetOnRunway();
-
-  if (name === 'cockpit') {
-    // Final approach: cockpit view, runway 09 ahead, PAPI lights, gear down feel.
+  const { flight, world } = game;
+  if (name === 'cover') {
+    // FIRE ATTACK: chase view, banking over the Nusa Selatan fire, one drop done.
+    // Staged close to the fire zone (720, 1560) so the smoke columns and the
+    // orange ground glow are in frame, not hidden behind the ridge.
+    game.setView('chase');
+    world.setDusk(false);
+    stageMission(game, 'fire', { drops: 1, elapsed: 96, score: 1350 });
+    world.fire.setRemaining(2);
+    placePlane(flight, 680, 110, 1470, 165, -3, -20, 58, 0.62);
+    flight.state.water = 0.5;
+    game.banner('FIRE DROP 2/3', 6);
+  } else if (name === 'cockpit') {
+    // NIGHT MAIL: cockpit view on final to runway 09 at dusk, edge lights + PAPI lit.
     game.setView('cockpit');
-    stageMission(game, 'landing', { climbed: true, elapsed: 96, score: 0 });
+    world.setDusk(true);
+    stageMission(game, 'nightmail', { gatesPassed: 3, gateIndex: 3, elapsed: 150, score: 4500 });
     placePlane(flight, -560, 32, 320, 90, -3, 0, 46, 0.42);
     game.banner('FINAL — RWY 09', 6);
-    return 'play';
-  }
-  if (name === 'landing') {
-    // Just over the threshold, flaring onto runway 09.
+  } else if (name === 'landing') {
+    // MEDEVAC: flaring over the threshold onto runway 09, patient aboard.
     game.setView('chase');
-    stageMission(game, 'landing', { climbed: true, elapsed: 128, score: 0 });
+    world.setDusk(false);
+    stageMission(game, 'medevac', { patientPickedUp: true, patientCondition: 82, elapsed: 210, score: 2800 });
     placePlane(flight, -380, 26, 318, 90, -2, 2, 38, 0.3);
-    game.banner('RWY 09 — FLARE', 6);
-    return 'play';
-  }
-  if (name === 'islands') {
-    // Banking turn over the sea, ring 7 low ahead, lighthouse islet off the left wing.
+    game.banner('MEDEVAC — RWY 09 — FLARE', 6);
+  } else if (name === 'islands') {
+    // ISLAND HOPPER: banking turn over the sea, lighthouse islet off the wing.
     game.setView('chase');
-    stageMission(game, 'rings', {
-      ringsPassed: 6, ringIndex: 6, elapsed: 74, score: 6200, timeLeft: 96,
-    });
+    world.setDusk(false);
+    stageMission(game, 'hopper', { stopsVisited: 1, stopIndex: 1, elapsed: 120, score: 1450 });
     placePlane(flight, -610, 150, 55, 324, 1, -25, 58, 0.62);
-    game.banner('RING 7/8', 6);
-    return 'play';
+    game.banner('STOP 2/3 — NUSA SELATAN', 6);
+  } else {
+    throw new Error(`unknown shot: ${name}`);
   }
-  // cover: chasing ring 3 over the coast, town and runway behind, HUD alive.
-  game.setView('chase');
-  stageMission(game, 'rings', {
-    ringsPassed: 2, ringIndex: 2, elapsed: 42, score: 2400, timeLeft: 118,
-  });
-  placePlane(flight, 900, 170, -550, 35, 0, 10, 64, 0.68);
-  game.banner('RING 3/8', 6);
   return 'play';
 }
 
-/** Ring/gate mesh colouring: next gold, passed green, the rest idle blue. */
+// Recolour the ring / gate hoops for the active sortie: the next objective is
+// gold, passed ones are green, everything else stays idle blue. Only the
+// rings and mail sorties colour their hoops; other sorties leave them idle.
 export function colourRings(world, missionState) {
-  const rings = world.ringMeshes;
-  rings.forEach((mesh, i) => {
-    const mat = mesh.userData.material;
-    const col = mesh.userData.columnMaterial;
-    if (missionState.id === 'rings') {
-      if (i < missionState.ringIndex) {
-        mat.color.set('#37d67a');
-        col.color.set('#37d67a');
-        mat.opacity = 0.45;
-      } else if (i === missionState.ringIndex) {
-        mat.color.set('#ffc21a');
-        col.color.set('#ffc21a');
-        mat.opacity = 0.95;
-      } else {
-        mat.color.set('#2fb3e6');
-        col.color.set('#2fb3e6');
-        mat.opacity = 0.7;
-      }
-    }
-  });
-  world.gateMeshes.forEach((mesh, i) => {
-    const mat = mesh.userData.material;
-    const col = mesh.userData.columnMaterial;
-    if (missionState.id === 'mail') {
-      if (i < missionState.gateIndex) {
-        mat.color.set('#37d67a');
-        col.color.set('#37d67a');
-        mat.opacity = 0.45;
-      } else if (i === missionState.gateIndex) {
-        mat.color.set('#ffc21a');
-        col.color.set('#ffc21a');
-        mat.opacity = 0.95;
-      } else {
-        mat.color.set('#2fb3e6');
-        col.color.set('#2fb3e6');
-        mat.opacity = 0.7;
-      }
-    }
-  });
+  if (!missionState || !world) return;
+  const paint = (mesh, kind) => {
+    const ud = mesh && mesh.userData;
+    if (!ud || !ud.material || !ud.columnMaterial) return;
+    const c = COLOURS[kind];
+    ud.material.color.set(c.hex);
+    ud.material.opacity = c.opacity;
+    ud.columnMaterial.color.set(c.hex);
+    ud.columnMaterial.opacity = c.opacity * 0.08;
+  };
+  if (missionState.id === 'rings' && Array.isArray(world.ringMeshes)) {
+    world.ringMeshes.forEach((mesh, i) => {
+      paint(mesh, i < (missionState.ringIndex || 0) ? 'passed' : i === (missionState.ringIndex || 0) ? 'next' : 'idle');
+    });
+  }
+  if ((missionState.id === 'mail' || missionState.id === 'nightmail') && Array.isArray(world.gateMeshes)) {
+    world.gateMeshes.forEach((mesh, i) => {
+      paint(mesh, i < (missionState.gateIndex || 0) ? 'passed' : i === (missionState.gateIndex || 0) ? 'next' : 'idle');
+    });
+  }
 }

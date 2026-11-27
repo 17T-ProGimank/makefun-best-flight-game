@@ -1,141 +1,232 @@
-// The aircraft: a bush plane built from primitives — fuselage, canopy, wings with
-// dihedral, tail, spinning propeller, fixed gear and blinking nav lights. The mesh
-// faces +Z (nose at +Z); the flight model yaws/pitches/rolls the group with
-// rotation order YXZ. buildPlane returns { group, propeller, strobe, setBank }.
+// NUSA SKY RUN — the bush plane: primitives-built, nose facing +Z,
+// rotation order YXZ applied by the caller. Plus strobe, water tank
+// and the water-drop particle effect for FIRE ATTACK.
 
 import * as THREE from 'three';
 import { PALETTE } from './config.js';
 
-function lambert(color) {
-  return new THREE.MeshLambertMaterial({ color });
-}
-
-function metal(color) {
-  return new THREE.MeshPhongMaterial({ color, shininess: 60, specular: new THREE.Color('#8899aa') });
-}
-
 export function buildPlane() {
   const group = new THREE.Group();
-  const teal = lambert(PALETTE.planeTeal);
-  const white = lambert(PALETTE.planeWhite);
-  const orange = lambert(PALETTE.planeOrange);
-  const dark = lambert('#22282e');
-  const glass = new THREE.MeshPhongMaterial({
-    color: '#1c3a4d', shininess: 140, specular: new THREE.Color('#cfe8ff'),
-  });
 
-  // Fuselage: a tapered cylinder along Z, nose at +Z.
-  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.05, 6.4, 12), teal);
+  const teal = new THREE.MeshLambertMaterial({ color: PALETTE.planeTeal });
+  const white = new THREE.MeshLambertMaterial({ color: PALETTE.planeWhite });
+  const orange = new THREE.MeshLambertMaterial({ color: PALETTE.planeOrange });
+  const dark = new THREE.MeshLambertMaterial({ color: '#1c2733' });
+  const glass = new THREE.MeshPhongMaterial({
+    color: '#20303e',
+    shininess: 120,
+    specular: '#bfe8ff',
+  });
+  const metal = new THREE.MeshLambertMaterial({ color: '#8b939c' });
+
+  // Fuselage: tapered cylinder along Z, nose toward +Z.
+  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.72, 7.4, 14), teal);
   fuselage.rotation.x = Math.PI / 2;
-  fuselage.position.z = 0.2;
+  fuselage.position.set(0, 0, -0.6);
   fuselage.castShadow = true;
   group.add(fuselage);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.6, 12), orange);
+
+  // Orange nose cone.
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.05, 1.7, 14), orange);
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = 4.2;
+  nose.position.set(0, 0, 3.85);
   nose.castShadow = true;
   group.add(nose);
-  const tailCone = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.2, 12), teal);
-  tailCone.rotation.x = -Math.PI / 2;
-  tailCone.position.z = -4.1;
+
+  // Tail cone tapering back.
+  const tailCone = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.16, 2.6, 12), teal);
+  tailCone.rotation.x = Math.PI / 2;
+  tailCone.position.set(0, 0.1, -5.5);
+  tailCone.castShadow = true;
   group.add(tailCone);
 
-  // Canopy: a flattened half-sphere of dark glass over the cockpit.
-  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 12), glass);
-  canopy.scale.set(0.9, 0.72, 1.7);
-  canopy.position.set(0, 0.85, 1.1);
+  // Canopy: dark-glass half-sphere on top of the fuselage.
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.95, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass);
+  canopy.scale.set(1, 0.72, 1.7);
+  canopy.position.set(0, 0.55, 0.9);
   group.add(canopy);
 
-  // Main wing: one wide thin box, slight dihedral, white with orange tips.
+  // Main wing: wide white slab with orange tips, slight dihedral via tilt.
   const wing = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.22, 1.9), white);
-  wing.position.set(0, 0.1, 0.6);
-  wing.rotation.z = 0;
+  wing.position.set(0, 0.28, 0.4);
   wing.castShadow = true;
   group.add(wing);
   for (const side of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 1.9), orange);
-    tip.position.set(side * 5.55, 0.1 + 0.18, 0.6);
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.24, 1.9), orange);
+    tip.position.set(side * 5.35, 0.28, 0.4);
+    tip.castShadow = true;
     group.add(tip);
-    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), dark);
-    strut.position.set(side * 2.6, -0.75, 0.6);
+    // Wing strut down to the fuselage belly.
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.9, 8), metal);
+    strut.position.set(side * 2.6, -0.55, 0.4);
     strut.rotation.z = side * 0.5;
     group.add(strut);
   }
 
-  // Tailplane and fin.
-  const tailplane = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.16, 1.2), white);
-  tailplane.position.set(0, 0.25, -4.6);
+  // Tailplane + orange fin.
+  const tailplane = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.16, 1.1), white);
+  tailplane.position.set(0, 0.25, -6.4);
+  tailplane.castShadow = true;
   group.add(tailplane);
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.9, 1.6), orange);
-  fin.position.set(0, 1.0, -4.7);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.9, 1.5), orange);
+  fin.position.set(0, 1.05, -6.4);
+  fin.castShadow = true;
   group.add(fin);
 
-  // Propeller: spinner + two blades, spins around Z at the nose.
+  // Propeller group at the nose (z ≈ 5.15).
   const propeller = new THREE.Group();
-  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 10), white);
+  propeller.position.set(0, 0, 5.15);
+  const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 12), orange);
   spinner.rotation.x = Math.PI / 2;
-  spinner.position.z = 0.2;
   propeller.add(spinner);
-  const bladeMat = new THREE.MeshLambertMaterial({ color: '#1a1d20' });
-  for (const angle of [0, Math.PI]) {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.4, 0.08), bladeMat);
-    blade.rotation.z = angle;
+  const bladeMat = new THREE.MeshLambertMaterial({ color: '#22262b' });
+  for (const a of [0, Math.PI]) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.34, 3.4, 0.1), bladeMat);
+    blade.rotation.z = a;
+    blade.position.z = -0.15;
     propeller.add(blade);
   }
-  // Translucent prop disc: reads as a spinning blur from any distance.
+  // Translucent prop disc.
   const disc = new THREE.Mesh(
-    new THREE.CircleGeometry(1.85, 24),
-    new THREE.MeshBasicMaterial({ color: '#cccccc', transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }),
+    new THREE.CircleGeometry(1.75, 32),
+    new THREE.MeshBasicMaterial({
+      color: '#cfd8de',
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
   );
+  disc.position.z = -0.2;
   propeller.add(disc);
-  propeller.position.z = 5.15;
   group.add(propeller);
 
-  // Fixed landing gear: two mains + a tail wheel.
+  // Fixed gear: two mains + tail wheel.
+  const wheelMat = new THREE.MeshLambertMaterial({ color: '#14181c' });
   for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 6), dark);
-    leg.position.set(side * 0.95, -1.35, 1.2);
-    leg.rotation.z = side * 0.28;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.5, 8), metal);
+    leg.position.set(side * 0.95, -1.35, 0.9);
+    leg.rotation.z = side * 0.35;
     group.add(leg);
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 12), dark);
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 14), wheelMat);
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(side * 1.15, -2.05, 1.2);
+    wheel.position.set(side * 1.2, -2.0, 0.9);
+    wheel.castShadow = true;
     group.add(wheel);
   }
-  const tailWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.2, 10), dark);
+  const tailWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 12), wheelMat);
   tailWheel.rotation.z = Math.PI / 2;
-  tailWheel.position.set(0, -1.15, -4.4);
+  tailWheel.position.set(0, -0.85, -6.2);
   group.add(tailWheel);
 
-  // Nav lights: red left, green right, white strobe on the tail.
-  const navLeft = new THREE.Mesh(
+  // Nav lights: red left (port), green right (starboard), white strobe at tail.
+  const navL = new THREE.Mesh(
     new THREE.SphereGeometry(0.16, 8, 6),
     new THREE.MeshBasicMaterial({ color: '#ff2d2d' }),
   );
-  navLeft.position.set(-5.7, 0.15, 0.6);
-  group.add(navLeft);
-  const navRight = new THREE.Mesh(
+  navL.position.set(-5.7, 0.28, 0.4);
+  group.add(navL);
+  const navR = new THREE.Mesh(
     new THREE.SphereGeometry(0.16, 8, 6),
-    new THREE.MeshBasicMaterial({ color: '#2dff5e' }),
+    new THREE.MeshBasicMaterial({ color: '#2dff5a' }),
   );
-  navRight.position.set(5.7, 0.15, 0.6);
-  group.add(navRight);
-  const strobe = new THREE.Mesh(
-    new THREE.SphereGeometry(0.14, 8, 6),
-    new THREE.MeshBasicMaterial({ color: '#ffffff' }),
-  );
-  strobe.position.set(0, 0.4, -5.3);
+  navR.position.set(5.7, 0.28, 0.4);
+  group.add(navR);
+  const strobeMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+  const strobe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), strobeMat);
+  strobe.position.set(0, 0.35, -6.9);
+  strobe.userData.material = strobeMat;
   group.add(strobe);
 
-  group.traverse((child) => {
-    if (child.isMesh) child.castShadow = true;
+  // Belly water tank (FIRE ATTACK): small translucent tank under the fuselage.
+  const tankMat = new THREE.MeshPhongMaterial({
+    color: '#2f9fd8',
+    transparent: true,
+    opacity: 0.75,
+    shininess: 60,
   });
+  const tank = new THREE.Mesh(new THREE.CapsuleGeometry(0.55, 1.6, 6, 12), tankMat);
+  tank.rotation.x = Math.PI / 2;
+  tank.position.set(0, -1.05, -0.4);
+  tank.castShadow = true;
+  tank.userData.material = tankMat;
+  group.add(tank);
 
-  return { group, propeller, strobe };
+  return { group, propeller, strobe, tank };
 }
 
-/** Point the strobe: on for a short blink once a second. */
 export function updateStrobe(strobe, elapsed) {
+  // Bright flash for the first 0.08 s of each second, dim otherwise.
   const phase = elapsed % 1;
-  strobe.material.color.set(phase < 0.08 ? '#ffffff' : '#555555');
+  const mat = strobe.userData.material || strobe.material;
+  if (phase < 0.08) {
+    mat.color.set('#ffffff');
+    strobe.scale.setScalar(1.8);
+  } else {
+    mat.color.set('#5a6068');
+    strobe.scale.setScalar(1);
+  }
+}
+
+export function setTankLevel(tank, level01) {
+  const level = Math.max(0, Math.min(1, level01));
+  const mat = tank.userData.material || tank.material;
+  // Full = bright water blue, empty = dark grey.
+  const full = new THREE.Color('#2f9fd8');
+  const empty = new THREE.Color('#3a4046');
+  mat.color.copy(empty).lerp(full, level);
+  mat.opacity = 0.25 + 0.5 * level;
+  tank.visible = true;
+}
+
+export function createDropEffect(scene) {
+  const COUNT = 40;
+  const pool = [];
+  const geo = new THREE.SphereGeometry(0.55, 6, 5);
+  const mat = new THREE.MeshBasicMaterial({
+    color: '#9fd8ff',
+    transparent: true,
+    opacity: 0.85,
+  });
+  for (let i = 0; i < COUNT; i++) {
+    const drop = new THREE.Mesh(geo, mat.clone());
+    drop.visible = false;
+    scene.add(drop);
+    pool.push({ mesh: drop, vx: 0, vy: 0, vz: 0, life: 0 });
+  }
+  let seed = 1234567;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  return {
+    drop(x, y, z) {
+      for (const p of pool) {
+        p.mesh.position.set(x + (rnd() - 0.5) * 3, y + (rnd() - 0.5) * 1.5, z + (rnd() - 0.5) * 3);
+        p.vx = (rnd() - 0.5) * 4;
+        p.vy = -6 - rnd() * 8;
+        p.vz = (rnd() - 0.5) * 4;
+        p.life = 1.2;
+        p.mesh.visible = true;
+        p.mesh.material.opacity = 0.85;
+        p.mesh.scale.setScalar(0.7 + rnd() * 0.7);
+      }
+    },
+    update(dt) {
+      for (const p of pool) {
+        if (!p.mesh.visible) continue;
+        p.life -= dt;
+        if (p.life <= 0) {
+          p.mesh.visible = false;
+          continue;
+        }
+        p.vy -= 22 * dt;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.mesh.material.opacity = 0.85 * (p.life / 1.2);
+      }
+    },
+  };
 }

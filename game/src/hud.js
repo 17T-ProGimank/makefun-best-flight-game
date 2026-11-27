@@ -1,352 +1,440 @@
-// The 2D overlay: HUD readouts, compass tape, the lit instrument cluster (attitude,
-// airspeed, altimeter, heading, fuel, throttle), the next-objective pointer, warnings
-// and banners. Drawn every frame on a canvas above the WebGL canvas; the DOM menus
-// (title, pause, debrief) live in index.html. All text uses the game font.
-
 import { FONT, PALETTE } from './config.js';
 
-function wrapDeg(deg) {
-  return ((deg + 540) % 360) - 180;
+const MS_TO_KT = 1.94384;
+const M_TO_FT = 3.28084;
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function fmtClock(timeLeft, missionId, elapsed = 0) {
+  // Untimed sorties carry timeLeft = Infinity: show elapsed flight time
+  // instead of formatting Infinity (which rendered as "Infinity:NaN").
+  if (typeof timeLeft !== 'number' || !Number.isFinite(timeLeft)) {
+    const t = Math.max(0, elapsed ?? 0);
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  if (missionId === 'rings' || missionId === 'nightmail') {
+    return `TIME ${Math.max(0, Math.ceil(timeLeft))}s`;
+  }
+  const t = Math.max(0, timeLeft);
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 export function createHud(canvas) {
   const ctx = canvas.getContext('2d');
-  let width = 1280;
-  let height = 720;
-  let scale = 1;
+  let W = 0;
+  let H = 0;
 
   function resize() {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = Math.round(width * ratio);
-    canvas.height = Math.round(height * ratio);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    scale = Math.min(width / 1280, height / 720);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = `${W}px`;
+    canvas.style.height = `${H}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  window.addEventListener('resize', resize);
   resize();
 
-  function text(value, x, y, size, color, align = 'left', weight = '600') {
-    ctx.font = `${weight} ${size}px ${FONT}`;
-    ctx.fillStyle = color;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(value, x, y);
-  }
-
   function panel(x, y, w, h, alpha = 0.55) {
-    ctx.fillStyle = `rgba(8, 14, 20, ${alpha})`;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 10);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(127, 231, 255, 0.25)';
+    ctx.fillStyle = `rgba(4, 18, 26, ${alpha})`;
+    ctx.strokeStyle = PALETTE.hudCyan;
     ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
     ctx.stroke();
   }
 
-  function drawCompassTape(headingDeg) {
-    const cx = width / 2;
-    const pxPerDeg = 3.2;
+  function gauge(x, y, r, label, drawFace) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(4, 18, 26, 0.78)';
+    ctx.strokeStyle = PALETTE.hudCyan;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.save();
     ctx.beginPath();
-    ctx.rect(cx - 260, 6, 520, 44);
+    ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
     ctx.clip();
-    panel(cx - 260, 6, 520, 44, 0.5);
-    for (let d = -180; d <= 180; d += 5) {
-      const rel = wrapDeg(d - headingDeg);
-      if (Math.abs(rel) > 80) continue;
-      const x = cx + rel * pxPerDeg;
-      const major = d % 45 === 0;
-      const label = ((d % 360) + 360) % 360;
-      ctx.strokeStyle = major ? PALETTE.hudCyan : 'rgba(127,231,255,0.45)';
+    drawFace(r);
+    ctx.restore();
+    ctx.fillStyle = PALETTE.hudAmber;
+    ctx.font = `600 10px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, 0, r + 13);
+    ctx.restore();
+  }
+
+  function dialTicks(r, majorEvery, labelFn) {
+    ctx.strokeStyle = PALETTE.hudCyan;
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 9px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let deg = 0; deg < 360; deg += 10) {
+      const a = (deg * Math.PI) / 180;
+      const major = deg % majorEvery === 0;
+      const r0 = major ? r - 9 : r - 5;
+      ctx.lineWidth = major ? 1.5 : 0.7;
+      ctx.beginPath();
+      ctx.moveTo(Math.sin(a) * r0, -Math.cos(a) * r0);
+      ctx.lineTo(Math.sin(a) * (r - 2), -Math.cos(a) * (r - 2));
+      ctx.stroke();
+      if (major && labelFn) {
+        const lab = labelFn(deg);
+        if (lab) ctx.fillText(lab, Math.sin(a) * (r - 17), -Math.cos(a) * (r - 17));
+      }
+    }
+  }
+
+  function needle(angleRad, len, color, width = 2) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.sin(angleRad) * len, -Math.cos(angleRad) * len);
+    ctx.stroke();
+  }
+
+  function drawCompass(s) {
+    const cx = W / 2;
+    const y = 18;
+    const half = 170;
+    const hdg = s.readouts.headingDeg;
+    panel(cx - half - 12, 6, half * 2 + 24, 46, 0.5);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx - half, 6, half * 2, 46);
+    ctx.clip();
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 11px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const pxPerDeg = 3.2;
+    for (let d = -60; d <= 60; d += 5) {
+      let deg = Math.round(hdg) + d;
+      deg = ((deg % 360) + 360) % 360;
+      const x = cx + d * pxPerDeg;
+      const major = deg % 45 === 0;
+      ctx.strokeStyle = major ? PALETTE.hudAmber : PALETTE.hudCyan;
       ctx.lineWidth = major ? 2 : 1;
       ctx.beginPath();
-      ctx.moveTo(x, 14);
-      ctx.lineTo(x, major ? 28 : 22);
+      ctx.moveTo(x, y + 22);
+      ctx.lineTo(x, y + (major ? 32 : 27));
       ctx.stroke();
       if (major) {
-        const name = label === 0 ? 'N' : label === 90 ? 'E' : label === 180 ? 'S' : label === 270 ? 'W' : String(label).padStart(3, '0');
-        text(name, x, 45, 13, PALETTE.hudCyan, 'center', '700');
+        const lab = deg === 0 ? 'N' : deg === 90 ? 'E' : deg === 180 ? 'S' : deg === 270 ? 'W' : String(deg);
+        ctx.fillStyle = PALETTE.hudAmber;
+        ctx.fillText(lab, x, y + 2);
       }
     }
     ctx.restore();
-    // Centre caret.
+    // Centre caret + heading readout.
     ctx.fillStyle = PALETTE.hudAmber;
     ctx.beginPath();
-    ctx.moveTo(cx - 7, 6);
-    ctx.lineTo(cx + 7, 6);
-    ctx.lineTo(cx, 16);
+    ctx.moveTo(cx - 6, 52);
+    ctx.lineTo(cx + 6, 52);
+    ctx.lineTo(cx, 58);
     ctx.closePath();
     ctx.fill();
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `700 13px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(Math.round(hdg)).padStart(3, '0'), cx, 60);
+    // Controls hint under the compass tape.
+    ctx.fillStyle = 'rgba(127, 231, 255, 0.75)';
+    ctx.font = `11px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('ARROWS/WASD fly · SHIFT/CTRL throttle · Q/E rudder · V view · P pause · R restart · M sound', cx, 80);
   }
 
-  function drawReadoutBlock(readouts) {
-    panel(14, 14, 344, 108, 0.55);
-    text('SPD', 28, 38, 12, 'rgba(127,231,255,0.8)', 'left', '700');
-    text(String(readouts.speedKt), 28, 74, 30, '#ffffff', 'left', '800');
-    text('KT', 84, 74, 13, PALETTE.hudCyan, 'left', '700');
-    text('ALT', 138, 38, 12, 'rgba(127,231,255,0.8)', 'left', '700');
-    text(String(readouts.altitudeFt), 138, 74, 30, '#ffffff', 'left', '800');
-    text('FT', 214, 74, 13, PALETTE.hudCyan, 'left', '700');
-    text('HDG', 250, 38, 12, 'rgba(127,231,255,0.8)', 'left', '700');
-    text(String(readouts.headingDeg).padStart(3, '0'), 250, 74, 30, '#ffffff', 'left', '800');
-    text(`V/S ${readouts.verticalSpeedFpm >= 0 ? '+' : ''}${readouts.verticalSpeedFpm} FPM`, 28, 102, 13, 'rgba(255,255,255,0.75)', 'left', '600');
+  function drawReadouts(s) {
+    const r = s.readouts;
+    panel(12, 12, 218, 108, 0.55);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `700 30px ${FONT}`;
+    ctx.fillText(`${Math.round(r.speedKt)}`, 24, 48);
+    ctx.font = `600 12px ${FONT}`;
+    ctx.fillText('KT', 92, 48);
+    ctx.fillStyle = PALETTE.hudAmber;
+    ctx.font = `700 30px ${FONT}`;
+    ctx.fillText(`${Math.round(r.altitudeFt)}`, 24, 84);
+    ctx.font = `600 12px ${FONT}`;
+    ctx.fillText('FT', 120, 84);
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 14px ${FONT}`;
+    const vs = r.verticalSpeedFpm;
+    ctx.fillText(`HDG ${String(Math.round(r.headingDeg)).padStart(3, '0')}°   V/S ${vs >= 0 ? '+' : ''}${Math.round(vs)} FPM`, 24, 110);
   }
 
-  function drawMissionBlock(mission, timeLeft, score, elapsed) {
-    const x = width - 314;
-    panel(x, 14, 300, 96, 0.55);
-    text(mission.name, x + 16, 38, 16, PALETTE.hudAmber, 'left', '800');
-    const clock = mission.id === 'rings'
-      ? `TIME ${Math.max(0, Math.ceil(timeLeft))}s`
-      : `TIME ${Math.floor(elapsed / 60)}:${String(Math.floor(elapsed % 60)).padStart(2, '0')}`;
-    text(clock, x + 16, 68, 22, '#ffffff', 'left', '800');
-    text(`SCORE ${score}`, x + 16, 96, 14, PALETTE.hudCyan, 'left', '700');
-    const progress = mission.id === 'rings' ? `RINGS ${mission.ringsPassed}/8`
-      : mission.id === 'mail' ? `MAIL ${mission.gatesPassed}/3`
-      : mission.id === 'landing' ? (mission.climbed ? 'CLIMBED ✓' : 'CLIMB 800 FT')
-      : 'FREE FLIGHT';
-    text(progress, x + 284, 38, 12, '#ffffff', 'right', '700');
+  function objectiveLines(s) {
+    const m = s.mission;
+    if (!m) return ['FREE FLIGHT'];
+    switch (m.id) {
+      case 'rings': return [`RINGS ${m.ringsPassed ?? 0}/8`];
+      case 'mail': case 'nightmail': return [`MAIL ${m.gatesPassed ?? 0}/3`];
+      case 'landing': return [m.climbed ? 'CLIMBED ✓' : 'CLIMB 800 FT', m.landed ? 'LANDED ✓' : 'LAND ON RUNWAY 09'];
+      case 'free': return ['FREE FLIGHT'];
+      case 'fire': {
+        const water = s.water >= 0.99 ? 'FULL' : s.water > 0.01 ? 'PART' : 'EMPTY';
+        return [`FIRE ${m.drops ?? 0}/${m.dropsNeeded ?? 3}`, `WATER: ${water}`];
+      }
+      case 'medevac': {
+        const patient = m.patientPickedUp ? 'ABOARD' : 'ON ISLET';
+        return [`PATIENT: ${patient}`, `CONDITION ${Math.round(m.patientCondition ?? 100)}%`];
+      }
+      case 'hopper': return [`STOPS ${m.stopsVisited ?? 0}/3`];
+      default: return [];
+    }
   }
 
-  function drawGauge(x, y, radius, label, drawFace) {
+  function drawMission(s) {
+    const m = s.mission;
+    const lines = objectiveLines(s);
+    const h = 78 + lines.length * 18;
+    panel(W - 252, 12, 240, h, 0.55);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = PALETTE.hudAmber;
+    ctx.font = `700 16px ${FONT}`;
+    ctx.fillText((m ? m.name : 'FREE FLIGHT').toUpperCase(), W - 238, 36);
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 14px ${FONT}`;
+    ctx.fillText(fmtClock(s.timeLeft, m ? m.id : 'free', s.elapsed), W - 238, 58);
+    ctx.fillStyle = PALETTE.hudAmber;
+    ctx.font = `700 15px ${FONT}`;
+    ctx.fillText(`SCORE ${Math.round(s.score ?? 0)}`, W - 238, 78);
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 13px ${FONT}`;
+    lines.forEach((line, i) => ctx.fillText(line, W - 238, 98 + i * 18));
+  }
+
+  function drawTarget(s, now) {
+    const t = s.target;
+    if (!t) return;
+    const hdg = s.readouts.headingDeg;
+    let diff = ((t.bearingDeg - hdg + 540) % 360) - 180;
+    const cx = W / 2;
+    const cy = H * 0.32;
+    const near = Math.abs(diff) <= 25;
+    const col = near ? '#7dff9a' : PALETTE.hudAmber;
     ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((diff * Math.PI) / 180);
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#0b1218';
+    ctx.moveTo(0, -26);
+    ctx.lineTo(16, 10);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(-16, 10);
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(127,231,255,0.5)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.clip();
-    drawFace(x, y, radius);
     ctx.restore();
-    text(label, x, y + radius + 18, 12, 'rgba(127,231,255,0.85)', 'center', '700');
+    ctx.fillStyle = col;
+    ctx.font = `700 15px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const dist = t.distance >= 1000 ? `${(t.distance / 1000).toFixed(1)} KM` : `${Math.round(t.distance)} M`;
+    ctx.fillText(`${t.label}  ·  ${dist}`, cx, cy + 56);
   }
 
-  function drawAttitude(x, y, radius, pitchDeg, rollRad) {
-    drawGauge(x, y, radius, 'ATTITUDE', (cx, cy, r) => {
+  function drawWarnings(s, now) {
+    const list = s.warnings || [];
+    list.forEach((w, i) => {
+      if (w.blink && Math.floor(now * 2.5) % 2 === 0) return;
+      ctx.fillStyle = w.color || '#ff5252';
+      ctx.font = `700 20px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(w.text, W / 2, H * 0.42 + i * 28);
+    });
+  }
+
+  function drawBanners(s) {
+    const list = s.banners || [];
+    list.forEach((b, i) => {
+      const remain = b.until - s.elapsed;
+      if (remain <= 0) return;
+      const alpha = clamp(remain < 1 ? remain : 1, 0, 1) * (b.alpha ?? 1);
       ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(-rollRad);
-      const pitchPx = Math.max(-r, Math.min(r, pitchDeg * 1.6));
-      ctx.translate(0, pitchPx);
-      ctx.fillStyle = '#3f8fd2';
-      ctx.fillRect(-r * 2, -r * 2, r * 4, r * 2);
-      ctx.fillStyle = '#8a5a34';
-      ctx.fillRect(-r * 2, 0, r * 4, r * 2);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = b.color || PALETTE.hudAmber;
+      ctx.font = `700 ${b.size || 34}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText(b.text, W / 2, H * 0.24 + i * 44);
+      ctx.restore();
+    });
+  }
+
+  function drawInstruments(s) {
+    const dusk = !!s.dusk;
+    const glow = dusk ? 12 : 0;
+    const rim = dusk ? '#bfefff' : PALETTE.hudCyan;
+    const r = s.readouts;
+    const pitch = (s.pitchDeg || 0) * (Math.PI / 180);
+    const roll = s.rollRad || 0;
+    const speedKt = r.speedKt;
+    const altFt = r.altitudeFt;
+    const hdg = r.headingDeg;
+    const cockpit = s.view === 'cockpit';
+    const cy = cockpit ? H - 62 : H - 58;
+    const gap = 96;
+    const cx0 = W / 2 - gap * 1.5;
+
+    if (cockpit) {
+      ctx.fillStyle = 'rgba(3, 10, 16, 0.92)';
+      ctx.fillRect(0, H - 128, W, 128);
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, H - 128);
+      ctx.lineTo(W, H - 128);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(4, 18, 26, 0.5)';
+      ctx.beginPath();
+      ctx.roundRect(W / 2 - 210, H - 118, 420, 106, 10);
+      ctx.fill();
+    }
+
+    ctx.save();
+    if (dusk) { ctx.shadowColor = rim; ctx.shadowBlur = glow; }
+
+    // Attitude indicator.
+    gauge(cx0, cy, 44, 'ATT', (gr) => {
+      ctx.save();
+      ctx.translate(0, clamp(pitch * gr * 1.4, -gr, gr) * -1);
+      ctx.rotate(-roll);
+      ctx.fillStyle = '#2f7fc2';
+      ctx.fillRect(-gr, -gr * 2, gr * 2, gr * 2);
+      ctx.fillStyle = '#7a4a22';
+      ctx.fillRect(-gr, 0, gr * 2, gr * 2);
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(-r * 2, 0);
-      ctx.lineTo(r * 2, 0);
+      ctx.moveTo(-gr, 0);
+      ctx.lineTo(gr, 0);
       ctx.stroke();
       ctx.restore();
       // Fixed wings marker.
       ctx.strokeStyle = PALETTE.hudAmber;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(x - radius * 0.55, y);
-      ctx.lineTo(x - radius * 0.2, y);
-      ctx.moveTo(x + radius * 0.2, y);
-      ctx.lineTo(x + radius * 0.55, y);
+      ctx.moveTo(-gr + 8, 0);
+      ctx.lineTo(-10, 0);
+      ctx.moveTo(10, 0);
+      ctx.lineTo(gr - 8, 0);
       ctx.stroke();
       ctx.fillStyle = PALETTE.hudAmber;
       ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
       ctx.fill();
     });
-  }
 
-  function drawDial(x, y, radius, label, value, max, unit, ticks) {
-    drawGauge(x, y, radius, label, (cx, cy, r) => {
-      for (let i = 0; i <= ticks; i += 1) {
-        const angle = (-225 + (i / ticks) * 270) * Math.PI / 180;
-        const major = i % (ticks / 4) === 0;
-        const x1 = cx + Math.cos(angle) * (r - 6);
-        const y1 = cy + Math.sin(angle) * (r - 6);
-        const x2 = cx + Math.cos(angle) * (r - (major ? 16 : 11));
-        const y2 = cy + Math.sin(angle) * (r - (major ? 16 : 11));
-        ctx.strokeStyle = major ? '#ffffff' : 'rgba(255,255,255,0.5)';
-        ctx.lineWidth = major ? 2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-      const angle = (-225 + Math.max(0, Math.min(1, value / max)) * 270) * Math.PI / 180;
-      ctx.strokeStyle = PALETTE.hudAmber;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(angle) * (r - 14), cy + Math.sin(angle) * (r - 14));
-      ctx.stroke();
+    // Airspeed dial.
+    gauge(cx0 + gap, cy, 44, 'KT', (gr) => {
+      dialTicks(gr, 90, (deg) => {
+        const kt = Math.round((deg / 360) * 200);
+        return kt % 50 === 0 ? String(kt) : '';
+      });
+      const a = clamp(speedKt, 0, 200) / 200 * Math.PI * 2;
+      needle(a, gr - 12, PALETTE.hudAmber, 2.5);
       ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-      ctx.fill();
-      text(unit, cx, cy + r * 0.45, 13, '#ffffff', 'center', '800');
+      ctx.font = `700 13px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.round(speedKt)), 0, gr - 22);
     });
-  }
 
-  function drawHeadingDial(x, y, radius, headingDeg) {
-    drawGauge(x, y, radius, 'HEADING', (cx, cy, r) => {
-      for (let d = 0; d < 360; d += 15) {
-        const angle = (d - headingDeg) * Math.PI / 180;
-        const major = d % 90 === 0;
-        const x1 = cx + Math.sin(angle) * (r - 6);
-        const y1 = cy - Math.cos(angle) * (r - 6);
-        const x2 = cx + Math.sin(angle) * (r - (major ? 18 : 11));
-        const y2 = cy - Math.cos(angle) * (r - (major ? 18 : 11));
-        ctx.strokeStyle = major ? '#ffffff' : 'rgba(255,255,255,0.5)';
-        ctx.lineWidth = major ? 2 : 1;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        if (major) {
-          const name = d === 0 ? 'N' : d === 90 ? 'E' : d === 180 ? 'S' : 'W';
-          text(name, cx + Math.sin(angle) * (r - 28), cy - Math.cos(angle) * (r - 28) + 4, 12, PALETTE.hudCyan, 'center', '700');
-        }
-      }
+    // Altimeter dial.
+    gauge(cx0 + gap * 2, cy, 44, 'ALT FT', (gr) => {
+      dialTicks(gr, 90, (deg) => String((deg / 90) * 250));
+      const frac = (altFt % 1000) / 1000;
+      needle(frac * Math.PI * 2, gr - 12, PALETTE.hudAmber, 2.5);
+      const thousands = Math.floor(altFt / 1000);
+      needle((thousands % 10) / 10 * Math.PI * 2, gr - 24, '#ffffff', 1.5);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `700 12px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.round(altFt)), 0, gr - 22);
+    });
+
+    // Heading dial.
+    gauge(cx0 + gap * 3, cy, 44, 'HDG', (gr) => {
+      dialTicks(gr, 90, (deg) => (deg === 0 ? 'N' : deg === 90 ? 'E' : deg === 180 ? 'S' : deg === 270 ? 'W' : ''));
+      ctx.save();
+      ctx.rotate((hdg * Math.PI) / 180);
       ctx.fillStyle = PALETTE.hudAmber;
       ctx.beginPath();
-      ctx.moveTo(cx - 6, cy - r + 4);
-      ctx.lineTo(cx + 6, cy - r + 4);
-      ctx.lineTo(cx, cy - r + 14);
+      ctx.moveTo(0, -gr + 14);
+      ctx.lineTo(7, -gr + 26);
+      ctx.lineTo(-7, -gr + 26);
       ctx.closePath();
       ctx.fill();
-      // Little plane silhouette in the middle.
+      ctx.restore();
       ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 10);
-      ctx.lineTo(cx + 4, cy + 8);
-      ctx.lineTo(cx, cy + 3);
-      ctx.lineTo(cx - 4, cy + 8);
-      ctx.closePath();
-      ctx.fill();
+      ctx.font = `700 12px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.round(hdg)).padStart(3, '0'), 0, gr - 22);
     });
+
+    ctx.restore();
+
+    // Throttle / fuel bars panel.
+    const bx = W / 2 + 216;
+    const by = cockpit ? H - 116 : H - 108;
+    panel(bx, by, 150, 92, 0.6);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 11px ${FONT}`;
+    ctx.fillText('THR', bx + 10, by + 20);
+    ctx.fillStyle = '#12303e';
+    ctx.fillRect(bx + 52, by + 9, 88, 12);
+    ctx.fillStyle = PALETTE.hudAmber;
+    ctx.fillRect(bx + 52, by + 9, 88 * clamp(r.throttle ?? 0, 0, 1), 12);
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.fillText('FUEL', bx + 10, by + 44);
+    const fuel = clamp(r.fuel ?? 0, 0, 100) / 100;
+    ctx.fillStyle = '#12303e';
+    ctx.fillRect(bx + 52, by + 33, 88, 12);
+    ctx.fillStyle = fuel < 0.2 ? '#ff5252' : '#7dff9a';
+    ctx.fillRect(bx + 52, by + 33, 88 * fuel, 12);
+    ctx.fillStyle = PALETTE.hudCyan;
+    ctx.font = `600 11px ${FONT}`;
+    ctx.fillText(`FUEL ${Math.round(r.fuel ?? 0)}%`, bx + 10, by + 66);
+    ctx.fillText(`THR ${Math.round((r.throttle ?? 0) * 100)}%`, bx + 10, by + 84);
   }
 
-  function drawThrottleFuel(readouts, x, y) {
-    panel(x, y, 190, 96, 0.55);
-    text('THR', x + 14, y + 22, 12, 'rgba(127,231,255,0.8)', 'left', '700');
-    const thrW = 110;
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(x + 52, y + 12, thrW, 12);
-    ctx.fillStyle = PALETTE.hudGreen;
-    ctx.fillRect(x + 52, y + 12, thrW * readouts.throttle, 12);
-    text(`${Math.round(readouts.throttle * 100)}%`, x + 168, y + 23, 12, '#ffffff', 'left', '700');
-    text('FUEL', x + 14, y + 52, 12, 'rgba(127,231,255,0.8)', 'left', '700');
-    const fuelW = 110;
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(x + 52, y + 42, fuelW, 12);
-    ctx.fillStyle = readouts.fuel < 20 ? PALETTE.hudRed : readouts.fuel < 45 ? PALETTE.hudAmber : PALETTE.hudGreen;
-    ctx.fillRect(x + 52, y + 42, fuelW * (readouts.fuel / 100), 12);
-    text(`${Math.round(readouts.fuel)}%`, x + 168, y + 53, 12, '#ffffff', 'left', '700');
-    text('SHIFT/CTRL or WHEEL — THROTTLE', x + 14, y + 82, 11, 'rgba(255,255,255,0.6)', 'left', '600');
-  }
-
-  function drawTargetPointer(target, headingDeg) {
-    if (!target) return;
-    const rel = wrapDeg(target.bearingDeg - headingDeg);
-    const dist = Math.round(target.distance);
-    const x = Math.max(90, Math.min(width - 90, width / 2 + (rel / 90) * (width / 2 - 60)));
-    const y = 132;
-    const pointing = Math.abs(rel) < 25;
-    ctx.fillStyle = pointing ? PALETTE.hudGreen : PALETTE.hudAmber;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 12);
-    ctx.lineTo(x + 11, y + 8);
-    ctx.lineTo(x, y + 2);
-    ctx.lineTo(x - 11, y + 8);
-    ctx.closePath();
-    ctx.fill();
-    text(`${target.label}  •  ${dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${dist} m`}`, x, y + 30, 14, pointing ? PALETTE.hudGreen : '#ffffff', 'center', '800');
-  }
-
-  function drawWarnings(warnings, elapsed) {
-    const blink = Math.floor(elapsed * 3) % 2 === 0;
-    let y = 170;
-    for (const warning of warnings) {
-      if (warning.blink && !blink) continue;
-      text(warning.text, width / 2, y, 24, warning.color, 'center', '800');
-      y += 32;
-    }
-  }
-
-  function drawBanners(banners) {
-    let y = height * 0.38;
-    for (const banner of banners) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, banner.alpha));
-      text(banner.text, width / 2, y, banner.size ?? 34, banner.color ?? PALETTE.hudAmber, 'center', '800');
-      ctx.globalAlpha = 1;
-      y += 46;
-    }
-  }
-
-  function drawCockpitFrame(readouts, pitchDeg, rollRad, headingDeg) {
-    // A dark console across the bottom of the screen with the lit gauges inside it,
-    // so the cockpit view reads as a flown panel rather than a floating HUD.
-    const panelH = 168;
-    const y0 = height - panelH;
-    const grad = ctx.createLinearGradient(0, y0, 0, height);
-    grad.addColorStop(0, '#141c22');
-    grad.addColorStop(1, '#05090c');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, y0, width, panelH);
-    ctx.strokeStyle = 'rgba(127,231,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, y0);
-    ctx.lineTo(width, y0);
-    ctx.stroke();
-    const cy = y0 + 78;
-    const gap = 150;
-    const cx = width / 2;
-    drawAttitude(cx - gap * 1.5, cy, 52, pitchDeg, rollRad);
-    drawDial(cx - gap * 0.5, cy, 52, 'AIRSPEED', readouts.speedKt, 130, `${readouts.speedKt} KT`, 12);
-    drawDial(cx + gap * 0.5, cy, 52, 'ALTITUDE', readouts.altitudeFt % 1000, 1000, `${readouts.altitudeFt} FT`, 10);
-    drawHeadingDial(cx + gap * 1.5, cy, 52, headingDeg);
-    drawThrottleFuel(readouts, 16, y0 + 36);
-    text('NUSA SKY RUN', width - 30, y0 + 60, 15, 'rgba(255,255,255,0.55)', 'right', '800');
-    text('V — CHASE VIEW', width - 30, y0 + 84, 12, 'rgba(255,255,255,0.45)', 'right', '600');
-  }
-
-  function drawChaseInstruments(readouts, pitchDeg, rollRad, headingDeg) {
-    const cy = height - 78;
-    const gap = 132;
-    const cx = width / 2;
-    ctx.fillStyle = 'rgba(8,14,20,0.45)';
-    ctx.beginPath();
-    ctx.roundRect(cx - gap * 2 - 70, cy - 74, gap * 4 + 140, 148, 12);
-    ctx.fill();
-    drawAttitude(cx - gap * 1.5, cy, 46, pitchDeg, rollRad);
-    drawDial(cx - gap * 0.5, cy, 46, 'AIRSPEED', readouts.speedKt, 130, `${readouts.speedKt} KT`, 12);
-    drawDial(cx + gap * 0.5, cy, 46, 'ALTITUDE', readouts.altitudeFt % 1000, 1000, `${readouts.altitudeFt} FT`, 10);
-    drawHeadingDial(cx + gap * 1.5, cy, 46, headingDeg);
-    drawThrottleFuel(readouts, 16, height - 112);
-  }
-
-  /** Paint one frame of the overlay. `s` carries everything the HUD needs. */
   function draw(s) {
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, W, H);
     if (!s.inFlight) return;
-    drawCompassTape(s.readouts.headingDeg);
-    drawReadoutBlock(s.readouts);
-    drawMissionBlock(s.mission, s.timeLeft, s.score, s.elapsed);
-    drawTargetPointer(s.target, s.readouts.headingDeg);
-    drawWarnings(s.warnings, s.elapsed);
-    if (s.view === 'cockpit') drawCockpitFrame(s.readouts, s.pitchDeg, s.rollRad, s.readouts.headingDeg);
-    else drawChaseInstruments(s.readouts, s.pitchDeg, s.rollRad, s.readouts.headingDeg);
-    drawBanners(s.banners);
-    // Controls hint, centred under the compass tape, clear of the instruments.
-    text('← → ROLL   ↑ ↓ PITCH   SHIFT/CTRL THROTTLE   Q/E RUDDER   V VIEW   P PAUSE', width / 2, 66, 12, 'rgba(255,255,255,0.55)', 'center', '600');
+    const now = (s.elapsed ?? 0);
+    drawCompass(s);
+    drawReadouts(s);
+    drawMission(s);
+    drawTarget(s, now);
+    drawWarnings(s, now);
+    drawBanners(s);
+    drawInstruments(s);
   }
 
   return { draw, resize };

@@ -1,7 +1,6 @@
-// NUSA SKY RUN — Island Air Post. Every tuning number, colour and world constant
-// in one place. The world is a 4.2 km archipelago: one main island with a runway and
-// a town, two bigger islands and a lighthouse islet, all in metres, y up, sea at 0.
-// Headings are degrees clockwise from north (-Z); north is -Z, east is +X.
+// NUSA SKY RUN — Island Air Post (round 2)
+// World / plane / mission configuration. All distances in metres, y up,
+// sea level 0, north = -Z, headings in degrees clockwise from north.
 
 export const WORLD = {
   size: 4200,
@@ -11,7 +10,6 @@ export const WORLD = {
 };
 
 export const RUNWAY = {
-  // East-west strip on the main island: heading 090/270, threshold at the west end.
   centreX: 0,
   centreZ: 320,
   elevation: 8,
@@ -20,13 +18,18 @@ export const RUNWAY = {
   heading: 90,
 };
 
-export const TOWN = { centreX: -80, centreZ: -120, radius: 380, flattenTo: 10 };
+export const TOWN = {
+  centreX: -80,
+  centreZ: -120,
+  radius: 380,
+  flattenTo: 10,
+};
 
 export const ISLANDS = [
-  { x: 0, z: 0, radius: 1150, height: 132, name: 'Nusa Besar' },
-  { x: 1560, z: -720, radius: 540, height: 74, name: 'Nusa Timur' },
-  { x: 720, z: 1560, radius: 660, height: 88, name: 'Nusa Selatan' },
-  { x: -1680, z: 640, radius: 270, height: 38, name: 'Mercusuar Islet' },
+  { name: 'Nusa Besar', x: 0, z: 0, radius: 1150, height: 132 },
+  { name: 'Nusa Timur', x: 1560, z: -720, radius: 540, height: 74 },
+  { name: 'Nusa Selatan', x: 720, z: 1560, radius: 660, height: 88 },
+  { name: 'Mercusuar Islet', x: -1680, z: 640, radius: 270, height: 38 },
 ];
 
 export const LIGHTHOUSE = { x: -640, z: -520 };
@@ -65,31 +68,53 @@ export const MAIL_GATES = [
 
 export const MISSIONS = {
   rings: {
-    id: 'rings',
     name: 'RING RUN',
-    tag: '8 rings around the islands — beat the clock',
+    tag: 'Thread all 8 rings against the clock',
     timeLimit: 150,
     ringBonusSeconds: 15,
     ringPoints: 1000,
   },
   mail: {
-    id: 'mail',
     name: 'MAIL RUN',
-    tag: 'Drop the mail at 3 island strips, then land home',
+    tag: 'Deliver the mail to all three island strips, then land home',
     gatePoints: 1500,
     landingPoints: 2000,
   },
   landing: {
-    id: 'landing',
     name: 'LANDING CHALLENGE',
-    tag: 'Take off, climb to 800 ft, come back and grease it',
+    tag: 'Climb to 800 ft and grease a landing on runway 09',
     climbTargetFt: 800,
     landingPoints: 3000,
   },
   free: {
-    id: 'free',
     name: 'FREE FLIGHT',
-    tag: 'No clock, no score — just fly the islands',
+    tag: 'The archipelago is yours — fly where you like',
+  },
+  fire: {
+    name: 'FIRE ATTACK',
+    tag: 'Scoop the sea, drop on the ridge fire — 3 drops to kill it',
+    dropsNeeded: 3,
+    dropPoints: 1200,
+    scoopPoints: 150,
+  },
+  medevac: {
+    name: 'MEDEVAC',
+    tag: 'Land on Mercusuar Islet, lift the patient home — fly gentle',
+    landingPoints: 2000,
+    pickupPoints: 800,
+  },
+  nightmail: {
+    name: 'NIGHT MAIL',
+    tag: 'The mail run at dusk — follow the flare lights home',
+    gatePoints: 1500,
+    landingPoints: 2000,
+    timeLimit: 240,
+  },
+  hopper: {
+    name: 'ISLAND HOPPER',
+    tag: 'Land Timur, Selatan, Mercusuar in order, then home',
+    stopPoints: 1200,
+    landingPoints: 2000,
   },
 };
 
@@ -115,7 +140,56 @@ export const PALETTE = {
   hudGreen: '#37d67a',
   hudRed: '#ff4d4d',
   panelDark: '#10161c',
+  duskSkyTop: '#1c2f55',
+  duskSkyHorizon: '#e8905a',
+  fireOrange: '#ff6a1a',
+  fireGlow: '#ffb347',
+  smokeGrey: '#5a5a5a',
 };
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+export const FONT =
+  'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
 export const BEST_KEY = 'nusa-sky-run.best';
+export const LOGBOOK_KEY = 'nusa-sky-run.logbook';
+
+export const FIRE_ZONE = {
+  x: 720,
+  z: 1560,
+  radius: 180,
+  name: 'Nusa Selatan ridge fire',
+  dropsNeeded: 3,
+};
+
+export const STRIPS = [
+  {
+    id: 'timur',
+    name: 'Nusa Timur strip',
+    x: 1560,
+    z: -720,
+    heading: 90,
+    length: 300,
+    width: 26,
+    elevation: 12,
+  },
+  {
+    id: 'selatan',
+    name: 'Nusa Selatan strip',
+    x: 720,
+    z: 1560,
+    heading: 90,
+    length: 300,
+    width: 26,
+    elevation: 14,
+  },
+  {
+    id: 'mercusuar',
+    name: 'Mercusuar Islet strip',
+    x: -1680,
+    z: 640,
+    heading: 90,
+    length: 260,
+    width: 24,
+    elevation: 10,
+  },
+];

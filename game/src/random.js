@@ -1,9 +1,11 @@
-// A small seeded random number generator (mulberry32): the same seed gives the same
-// world, which is what makes the terrain and the screenshot scenes repeatable.
+// Seeded randomness + small math helpers for the Nusa Sky Run world.
+// Everything here is deterministic for a given seed.
 
 export function createRandom(seed) {
-  let a = seed | 0;
-  return function random() {
+  // mulberry32 — small, fast, deterministic PRNG.
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0;
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
@@ -11,14 +13,16 @@ export function createRandom(seed) {
   };
 }
 
-/** Deterministic 2D value noise: hash of the integer lattice, smoothly interpolated. */
 export function hash2(ix, iz, seed) {
-  let h = (ix * 374761393 + iz * 668265263 + seed * 974634211) | 0;
+  // Deterministic 0..1 hash of an integer lattice point.
+  let h = (ix * 374761393 + iz * 668265263 + seed * 974634239) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return (((h ^ (h >>> 16)) >>> 0) / 4294967296);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
 }
 
 export function valueNoise(x, z, seed) {
+  // Smooth interpolated lattice noise, output roughly 0..1.
   const ix = Math.floor(x);
   const iz = Math.floor(z);
   const fx = x - ix;
@@ -29,20 +33,28 @@ export function valueNoise(x, z, seed) {
   const b = hash2(ix + 1, iz, seed);
   const c = hash2(ix, iz + 1, seed);
   const d = hash2(ix + 1, iz + 1, seed);
-  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+  const top = a + (b - a) * sx;
+  const bottom = c + (d - c) * sx;
+  return top + (bottom - top) * sz;
 }
 
-/** Three octaves of value noise, roughly in 0..1. */
 export function fbm(x, z, seed) {
-  return (
-    valueNoise(x, z, seed) * 0.55 +
-    valueNoise(x * 2.13, z * 2.13, seed + 11) * 0.3 +
-    valueNoise(x * 4.31, z * 4.31, seed + 29) * 0.15
-  );
+  // 3-octave fractal noise, output roughly 0..1.
+  let sum = 0;
+  let amp = 0.5;
+  let freq = 1;
+  for (let o = 0; o < 3; o++) {
+    sum += amp * valueNoise(x * freq, z * freq, seed + o * 101);
+    amp *= 0.5;
+    freq *= 2.03;
+  }
+  return sum;
 }
 
 export function clamp(value, min, max) {
-  return value < min ? min : value > max ? max : value;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
 }
 
 export function lerp(a, b, t) {
