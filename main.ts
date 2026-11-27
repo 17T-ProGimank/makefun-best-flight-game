@@ -1,16 +1,11 @@
-// NUSA SKY RUN — Island Air Post, a best-flight-game entry (Node 22, stdlib only).
-// The game is this directory's game/ folder: plain static files a desktop browser
-// loads offline (game/index.html and its ES modules, Three.js vendored as a minified
-// build under game/vendor/, no network request). This program hands it in: it copies
-// game/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored make.fun
-// library. The game itself is a 3D bush-plane flight game: chase and cockpit views
-// over an island archipelago, a ring course, mail drops, a graded landing challenge,
-// lit instruments and a full HUD.
+// Entry point for "NUSA SKY RUN — Island Air Post" (round 2), Node 22, stdlib only.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Copies the static game (game/) and the screenshots (screenshots/) from beside
+// this file into the output directory, then writes dossier.json there with the
+// vendored make.fun library. The scorer reads dossier.json; nothing else here
+// has any behaviour. Run locally with MAKEFUN_OUTPUT_DIR set:
+//   MAKEFUN_OUTPUT_DIR=/tmp/out node main.ts
+// Inside the grader the output directory defaults to /output.
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,15 +15,18 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// The game tree first, then the screenshots (created by the headless shot run).
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+if (existsSync(join(here, 'screenshots'))) {
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+}
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
+// Caps straight from the competition's gate.json. Only text_max_bytes shapes
+// the dossier bytes; the rest make this program refuse exactly where the
+// scorer would (over 4 screenshots or one over 256 KiB; over 993 game files
+// or 48 MiB of game files; a game path over 1000 bytes).
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {

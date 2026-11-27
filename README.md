@@ -1,61 +1,103 @@
-[![make.fun bounty](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
-[![rank](https://make.fun/badge/best-flight-game-20261126-0057/17T-ProGimank/makefun-best-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
-[![reward](https://make.fun/badge/best-flight-game-20261126-0057/17T-ProGimank/makefun-best-flight-game/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
+[![make.fun bounty](https://img.shields.io/badge/make.fun-bounty-blue)](https://make.fun/bounty/best-flight-game-20261126-0057)
+[![rank](https://img.shields.io/badge/rank-blind%20round%204-lightgrey)](https://make.fun/bounty/best-flight-game-20261126-0057)
+[![reward](https://img.shields.io/badge/reward-%24500-green)](https://make.fun/bounty/best-flight-game-20261126-0057)
 
 # NUSA SKY RUN — Island Air Post
 
-A 3D bush-plane flight game for the [make.fun best flight game bounty](https://make.fun/bounty/best-flight-game-20261126-0057). One bush plane, four islands, one short runway: race eight glowing rings around the archipelago against the clock, drop the mail at three island strips and land back home, or take off, climb to 800 ft and grease a landing on runway 09 — graded on softness, centreline and speed. Fuel burns with the throttle, the wing stalls below 52 kt, and the sea below does not forgive a glide.
+A 3D bush-plane game over a 4.2 km Indonesian archipelago. You are the island
+air post: fly the mail, fight fires, carry patients, and land on short island
+strips — in daylight or at dusk, with a real flight model (stall, coordinated
+turns, graded landings) and a flight-recorder debrief after every sortie.
 
-## How to play
+Bounty: [best-flight-game-20261126-0057](https://make.fun/bounty/best-flight-game-20261126-0057) — $500.
+Referral: [m4psg5rh](https://make.fun/r/m4psg5rh)
 
-Serve the game and open it in a desktop browser:
+## Play
 
-```
-node serve.ts
-```
+Open `game/index.html` in a browser (or `node serve.ts` then
+http://localhost:8080). No build step, no network — Three.js is vendored under
+`game/vendor/`. Pick a sortie on the title screen (click, or keys **1–8**).
 
-Then open http://localhost:8080. No build step, no network requests — every file the game loads lives under `game/` (Three.js is vendored as a minified build under `game/vendor/`).
+## The 8 sorties
 
-- **← →** roll, **↑ ↓** pitch — or drag the mouse like a stick
-- **Shift / Ctrl** or **mouse wheel** — throttle
-- **Q / E** — rudder
-- **V** — cockpit / chase view
-- **P** — pause, **R** — restart, **M** — sound
-- **1–4** or click — pick a sortie on the title screen
+| Key | Sortie | The job |
+|-----|--------|---------|
+| 1 | Ring Run | Thread 8 rings over the islands against the clock. |
+| 2 | Mail Run | Fly the mail through 3 island gates, then land home on runway 09. |
+| 3 | Landing Challenge | Land on runway 09 as softly and centred as you can — graded S/A/B/C. |
+| 4 | Free Flight | No objectives. Just fly, watch the sun, buzz the lighthouse. |
+| 5 | Fire Attack | A wildfire burns on Nusa Selatan. Skim the sea low and slow (speed > 40, under 6 m, 2 s) to scoop water, then drop it on the fire below 120 m. 3 drops kill the fire. |
+| 6 | Medevac | Land on the Mercusuar Islet strip, pick up the patient (5 s on the ground), fly home gently — hard banks and rough air hurt the patient, and landing grade × condition is your score. |
+| 7 | Night Mail | The Mail Run at dusk: runway edge lights and strip flares are the only way to see the strips. Tighter clock, glowing instruments. |
+| 8 | Island Hopper | Land at all three island strips in order — Timur, Selatan, Mercusuar — each landing graded, then land home. Fuel is the decision; you refuel only on a safe runway landing. |
 
-## The sorties
+## Controls
 
-- **Ring Run** — 8 rings around the islands against a 150-second clock; every ring adds 15 seconds and 1,000 points.
-- **Mail Run** — drop the mail at the Nusa Timur, Nusa Selatan and Mercusuar strips, then land back home on runway 09. Fuel is the decision.
-- **Landing Challenge** — take off, climb to 800 ft, come back and land it. Touchdown is graded S/A/B/C on vertical speed, centreline offset and speed.
-- **Free Flight** — no clock, no score. Just you, the plane and the islands.
+- **← →** roll · **↑ ↓** pitch · **Shift / Ctrl** or mouse wheel: throttle
+- **Q / E** rudder · **V** chase / cockpit view · **P** pause · **R** restart
+- **M** sound on/off · **1–8** pick a sortie · mouse: stick
+- Touchdown is graded on softness (vertical speed, 55%), centreline offset
+  (30%) and speed (15%). Stall speed is ~27 m/s — keep the nose honest.
 
-Land on the runway and the plane refuels. Fly into terrain or ditch in the sea and the sortie ends with a flight-recorder debrief: score, time, rings, mail, landings and the flight log.
+## Flight-recorder debrief + pilot logbook
 
-## What you see
-
-Chase or cockpit view over a procedural archipelago — main island with a town, a lighthouse on the hill, two more islands and a lighthouse islet, drifting clouds, a low sun and the sea. The HUD carries altitude, speed and heading in big numerals, a compass tape, a pointer to the next ring or strip with its distance, PAPI glideslope lights beside the runway, and a lit instrument cluster: attitude indicator, airspeed dial, altimeter, heading dial, fuel and throttle. In cockpit view the gauges sit in a dark console panel. Engine hum and wind are synthesized with WebAudio — no audio files.
+Every sortie is recorded at 1 Hz (time, altitude, speed, heading, position,
+throttle, fuel) plus every event — rings, gates, drops, pickups, touchdowns,
+crashes. When a sortie ends the debrief shows the score broken down per
+objective, a mini-map trace of your flight path over the islands (rings,
+strips and runway marked, crash point marked), your best landing broken into
+softness / centreline / speed bars, max altitude, max speed, distance flown,
+and the full event log. Your best scores live on in the pilot logbook on the
+title screen (localStorage key `nusa-sky-run.logbook`): best score per sortie,
+flights flown, total rings, total mail, best landing grade ever.
 
 ## Structure
 
-- `game/index.html` — the page, two canvases (WebGL + HUD overlay) and the DOM menus
-- `game/src/config.js` — tuning numbers, world constants, missions, palette
-- `game/src/random.js` — seeded random and value noise
-- `game/src/terrain.js` — heightfield islands, sea, sky, clouds, town, lighthouse, runway + PAPI, rings
-- `game/src/plane.js` — the bush plane mesh: fuselage, canopy, wings, prop, gear, nav lights
-- `game/src/flight.js` — flight model: thrust/drag, coordinated turns, stall, landings, crashes
-- `game/src/missions.js` — the four sorties, scoring, landing grades, debrief
-- `game/src/hud.js` — HUD, compass tape, lit instruments, target pointer, warnings, banners
-- `game/src/audio.js` — procedural engine, wind, chimes, thuds (WebAudio, no files)
-- `game/src/input.js` — keyboard + mouse stick + wheel throttle
-- `game/src/shots.js` — deterministic `?shot=` staging for screenshots
-- `game/src/main.js` — boot, fixed-step loop, cameras, screens, self-test
-- `main.ts` — the make.fun hand-in program (Node 22, stdlib only)
+```
+game/
+  index.html            title screen, HUD canvas, debrief screen
+  src/
+    config.js           world constants, palette, strips, rings, gates
+    random.js           seeded RNG (seed 7 — same world every run)
+    terrain.js          islands, sea, town, lighthouse, runway + PAPI,
+                        fire zone + smoke, dusk lighting, edge/flare lights
+    plane.js            bush plane mesh, prop, strobe, water tank, drop effect
+    flight.js           flight model: thrust/drag, stall, touchdown/crash,
+                        scooping, dropping, fuel, out-of-bounds
+    missions.js         all 8 sorties: objectives, scoring, landing grades
+    recorder.js         1 Hz flight recorder, debrief data, mini-map, logbook
+    hud.js              instruments, compass tape, objective pointer, banners
+    audio.js            WebAudio engine / wind / chimes (no audio files)
+    input.js            keyboard, mouse stick, throttle wheel
+    shots.js            deterministic ?shot= staging for the 4 screenshots
+    main.js             game loop, views, ?selftest=1, ?missiontest=<id>
+  vendor/
+    three.module.min.js Three.js 0.170.0 (vendored library)
+main.ts                 copies game/ + screenshots/ to the output dir and
+                        writes dossier.json via vendor/makefun-game.ts
+serve.ts                dev server: node serve.ts → http://localhost:8080
+shots.json              the 4 screenshot scenes
+```
+
+## Headless checks
+
+- `http://localhost:8080/?selftest=1` — runs takeoff, a ring pass and a fire
+  scoop + drop, and reports JSON into `#selftest` (errors must be empty).
+- `http://localhost:8080/?missiontest=<id>` — autopilot play-test for one
+  sortie (`rings`, `mail`, `landing`, `free`, `fire`, `medevac`, `nightmail`,
+  `hopper`), JSON into `#selftest`.
+- `http://localhost:8080/?shot=<name>&seed=7` — stages a screenshot scene
+  (`cover`, `cockpit`, `landing`, `islands`); see `shots.json`.
 
 ## Screenshots
 
-`?shot=cover`, `?shot=cockpit`, `?shot=landing` and `?shot=islands` put the game into fixed, good-looking states; the four JPEGs in `screenshots/` are real renders of the game's own code. `?selftest=1` flies the physics headlessly and reports into `#selftest`.
+1. `1-cover.jpg` — Fire Attack: banking over the Nusa Selatan fire, drop in progress.
+2. `2-cockpit.jpg` — Night Mail: cockpit view on final to runway 09 at dusk.
+3. `3-landing.jpg` — Medevac: flaring over the threshold onto runway 09.
+4. `4-islands.jpg` — Island Hopper: banking turn over the sea, lighthouse islet off the wing.
 
-## Referral
+Each is a real render of this game's own code, ≤ 256 KiB.
 
-Built for make.fun — sign up through my referral link: https://make.fun/r/m4psg5rh (code `m4psg5rh`).
+## License
+
+MIT — see [LICENSE](LICENSE).
