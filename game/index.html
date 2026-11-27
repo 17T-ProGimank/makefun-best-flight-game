@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NUSA SKY RUN — Island Air Post</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1218;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #gl, #hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { pointer-events: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: rgba(5, 10, 14, 0.45); z-index: 10; }
+  .overlay.hidden { display: none; }
+  .card { background: rgba(10, 18, 24, 0.92); border: 1px solid rgba(127, 231, 255, 0.35);
+    border-radius: 16px; padding: 28px 34px; max-width: 640px; width: calc(100% - 48px);
+    color: #eef4f8; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55); }
+  .card h1 { margin: 0 0 4px; font-size: 40px; letter-spacing: 2px; color: #7fe7ff; }
+  .card h1 .accent { color: #ffc21a; }
+  .card h2 { margin: 0 0 6px; font-size: 26px; color: #ffc21a; letter-spacing: 1px; }
+  .card p { margin: 8px 0; line-height: 1.5; color: #c8d6de; }
+  .card .sub { color: #7fe7ff; font-weight: 700; letter-spacing: 1px; }
+  .missions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0 6px; }
+  .mission-btn { text-align: left; background: #12222c; border: 1px solid rgba(127,231,255,0.35);
+    border-radius: 10px; padding: 12px 14px; color: #eef4f8; cursor: pointer; font: inherit; }
+  .mission-btn:hover, .mission-btn:focus-visible { border-color: #ffc21a; background: #1a2f3a; outline: none; }
+  .mission-btn b { display: block; font-size: 16px; color: #ffc21a; margin-bottom: 3px; }
+  .mission-btn span { font-size: 13px; color: #b9c9d2; line-height: 1.4; display: block; }
+  .mission-btn .key { float: right; color: #7fe7ff; font-weight: 800; }
+  .controls { font-size: 13px; color: #9fb2bd; line-height: 1.7; margin-top: 14px;
+    border-top: 1px solid rgba(127,231,255,0.2); padding-top: 12px; }
+  .controls b { color: #eef4f8; }
+  .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .btn { background: #ffc21a; color: #1a1405; border: 0; border-radius: 8px;
+    padding: 11px 20px; font: inherit; font-weight: 800; cursor: pointer; }
+  .btn.ghost { background: transparent; color: #7fe7ff; border: 1px solid rgba(127,231,255,0.5); }
+  .btn:hover { filter: brightness(1.08); }
+  .debrief-row { display: flex; justify-content: space-between; padding: 7px 0;
+    border-bottom: 1px solid rgba(127,231,255,0.14); }
+  .debrief-row span { color: #9fb2bd; }
+  .debrief-row.good b { color: #37d67a; }
+  .debrief-row.bad b { color: #ff4d4d; }
+  .debrief-log { margin-top: 12px; font-size: 13px; color: #8fa3ad; line-height: 1.7; }
+  #best-line { margin-top: 14px; font-size: 13px; color: #7fe7ff; }
+  #errors, #selftest { display: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="gl" aria-label="NUSA SKY RUN: fly a bush plane over an island archipelago"></canvas>
+<canvas id="hud"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="errors"></div>
+<div id="selftest"></div>
+
+<div id="title" class="overlay">
+  <div class="card">
+    <h1>NUSA <span class="accent">SKY RUN</span></h1>
+    <p class="sub">ISLAND AIR POST &mdash; FLY THE ARCHIPELAGO</p>
+    <p>One bush plane, four islands, one short runway. Race the rings, drop the
+    mail at three island strips, or grease a landing on runway 09 &mdash; and watch
+    your fuel, because the sea below does not forgive a glide.</p>
+    <div class="missions">
+      <button class="mission-btn" data-mission="rings"><span class="key">1</span><b>RING RUN</b><span>8 rings around the islands against the clock. Every ring adds 15 seconds.</span></button>
+      <button class="mission-btn" data-mission="mail"><span class="key">2</span><b>MAIL RUN</b><span>Drop the mail at 3 island strips, then land back home on runway 09.</span></button>
+      <button class="mission-btn" data-mission="landing"><span class="key">3</span><b>LANDING CHALLENGE</b><span>Take off, climb to 800 ft, come back and land it soft and centred.</span></button>
+      <button class="mission-btn" data-mission="free"><span class="key">4</span><b>FREE FLIGHT</b><span>No clock, no score. Just you, the plane and the islands.</span></button>
+    </div>
+    <div class="controls">
+      <b>&larr; &rarr;</b> roll &nbsp; <b>&uarr; &darr;</b> pitch &nbsp; <b>Shift / Ctrl</b> throttle
+      &nbsp; <b>Q / E</b> rudder &nbsp; <b>drag mouse</b> stick &nbsp; <b>wheel</b> throttle<br>
+      <b>V</b> cockpit / chase view &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart &nbsp; <b>M</b> sound
+    </div>
+    <p id="best-line"></p>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <p>The islands will wait. Your fuel will not &mdash; well, actually, right now it will.</p>
+    <div class="btn-row">
+      <button class="btn" data-action="resume">RESUME (P)</button>
+      <button class="btn ghost" data-action="restart">RESTART (R)</button>
+      <button class="btn ghost" data-action="title">CHANGE SORTIE</button>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="card">
+    <h2 id="over-title">SORTIE COMPLETE</h2>
+    <div id="over-body"></div>
+    <div class="btn-row">
+      <button class="btn" data-action="again">FLY AGAIN (R)</button>
+      <button class="btn ghost" data-action="title">CHANGE SORTIE</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
